@@ -30,30 +30,47 @@ from decision_fusion import DecisionFusion
 
 # =========================================================================
 #                   SENTINEL DMS — Brand system
+#                   Apple / Tesla inspired dark theme
 # =========================================================================
 BRAND_NAME = "SENTINEL"
 BRAND_SUB = "DRIVER MONITORING SYSTEM"
 BRAND_VERSION = "v1.0"
 
-# ---- palette ----
-C_BG          = "#06080f"   # page background (deepest)
-C_BG_ALT      = "#0a0f1c"   # secondary bg
-C_CARD        = "#0d1220"   # card background
-C_CARD_2      = "#111a2e"   # elevated / accent card
-C_BORDER      = "#1a2335"   # standard border
-C_BORDER_2    = "#2a3550"   # hover / highlight border
+# ---- Apple iOS 13+ dark-mode / Tesla cockpit palette ----
+C_BG          = "#000000"   # true OLED black (Tesla + iOS)
+C_BG_ALT      = "#0a0a0c"   # subtle lift under the main bg
+C_CARD        = "#1c1c1e"   # iOS systemGray6 (dark) — secondary bg
+C_CARD_2      = "#2c2c2e"   # iOS systemGray5 (dark) — elevated card
+C_BORDER      = "#38383a"   # iOS separatorColor (dark)
+C_BORDER_2    = "#48484a"   # iOS systemGray4 — stronger separator
 
-C_TEXT        = "#f1f5f9"   # primary text
-C_TEXT_DIM    = "#94a3b8"   # secondary text
-C_TEXT_MUTED  = "#475569"   # tertiary text / caption
+C_TEXT        = "#ffffff"   # pure white primary
+C_TEXT_DIM    = "#ebebf5"   # iOS secondary label (alpha via color)
+C_TEXT_MUTED  = "#8e8e93"   # iOS systemGray — tertiary label
+C_TEXT_FAINT  = "#636366"   # iOS systemGray2 — quaternary label
 
-C_ACCENT      = "#06b6d4"   # brand cyan (HUD lines, brand mark)
-C_ACCENT_2    = "#0891b2"   # darker cyan
+C_ACCENT      = "#0a84ff"   # iOS system blue (dark mode)
+C_ACCENT_2    = "#5ac8fa"   # iOS system teal (dark mode)
 
-C_OK          = "#10b981"   # green
-C_WARN        = "#f59e0b"   # amber
-C_DANGER      = "#ef4444"   # red
-C_CRITICAL    = "#dc2626"   # deep red
+C_OK          = "#30d158"   # iOS system green (dark)
+C_WARN        = "#ffd60a"   # iOS system yellow (dark)
+C_ORANGE      = "#ff9f0a"   # iOS system orange (dark)
+C_DANGER      = "#ff453a"   # iOS system red (dark)
+C_CRITICAL    = "#ff3b30"   # iOS system red (standard)
+
+# Preferred font families. SF Pro is Apple's system font — not available on
+# Linux, so Qt falls through to Ubuntu Sans (very clean modern sans, close
+# in feel), Noto Sans, and finally the generic sans fallback. Chinese text
+# auto-falls to Noto Sans CJK SC via Qt's per-glyph fallback.
+FONT_STACK = (
+    "'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Inter', "
+    "'Ubuntu Sans', 'Ubuntu', 'Noto Sans', 'Noto Sans CJK SC', "
+    "'DejaVu Sans', sans-serif"
+)
+FONT_MONO_STACK = (
+    "'SF Mono', 'JetBrains Mono', 'Fira Code', 'Ubuntu Mono', "
+    "'DejaVu Sans Mono', monospace"
+)
 
 
 def _risk_color_hex(level) -> str:
@@ -66,7 +83,7 @@ def _risk_color_hex(level) -> str:
     if v < 5:
         return C_WARN
     if v < 7:
-        return "#f97316"
+        return C_ORANGE
     return C_DANGER
 
 
@@ -74,9 +91,26 @@ def _action_color_hex(action: str) -> str:
     return {
         "none": C_OK,
         "verbal_warning": C_WARN,
-        "alarm": "#f97316",
+        "alarm": C_ORANGE,
         "pull_over": C_DANGER,
     }.get(str(action).lower(), C_TEXT_MUTED)
+
+
+def _product_font(size_pt: float, weight=QFont.Normal, letter_spacing=0.0):
+    """Build a QFont from the Apple-leaning system stack."""
+    f = QFont()
+    f.setFamilies([
+        "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter",
+        "Ubuntu Sans", "Ubuntu", "Noto Sans", "Noto Sans CJK SC",
+        "DejaVu Sans",
+    ])
+    f.setPointSizeF(size_pt)
+    f.setWeight(weight)
+    if letter_spacing:
+        f.setLetterSpacing(QFont.AbsoluteSpacing, letter_spacing)
+    f.setHintingPreference(QFont.PreferFullHinting)
+    f.setStyleStrategy(QFont.PreferAntialias)
+    return f
 
 
 # ----- color helpers for the multi-dimensional VLM panel ------------------
@@ -160,16 +194,16 @@ def _ear_from_landmarks(landmarks, idx, w, h):
 
 class RiskGauge(QWidget):
     """
-    Radial arc gauge for overall risk 0..10.
+    Radial arc gauge for overall risk 0..10 — Apple/Tesla cockpit style.
 
-    - Tick marks at even integers
-    - Center shows large animated value (eased toward target)
-    - Bottom hosts the recommended-action banner
+    - Three minimal tick marks (0 / 5 / 10), no cluttering numbers
+    - Center shows huge animated value (eased toward target) in Black weight
+    - Bottom hosts the recommended-action banner with gradient fill
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(440, 380)
+        self.setMinimumSize(520, 460)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self._target = 0.0
@@ -185,7 +219,6 @@ class RiskGauge(QWidget):
         self._tick_timer.timeout.connect(self._step)
         self._tick_timer.start(16)  # ~60 FPS animation
 
-    # ----- public -----
     def set_state(self, value, label, color_hex,
                   action_label, action_color_hex,
                   fast_w=1.0, slow_w=0.0):
@@ -206,17 +239,17 @@ class RiskGauge(QWidget):
             self._display = self._target
             self.update()
 
-    # ----- paint -----
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.TextAntialiasing, True)
 
         w, h = self.width(), self.height()
-        banner_h = 56
-        gauge_h = h - banner_h - 20
+        banner_h = 72
+        gauge_area_h = h - banner_h - 24
 
-        side = min(w - 80, gauge_h - 20)
-        side = max(side, 200)
+        side = min(w - 60, gauge_area_h - 20)
+        side = max(side, 240)
         cx = w / 2.0
         cy = 24 + side / 2.0
         r = side / 2.0
@@ -225,86 +258,97 @@ class RiskGauge(QWidget):
         start_angle = int(225 * 16)
         span_bg = int(-270 * 16)
 
-        # --- background arc ---
-        p.setPen(QPen(QColor(C_BORDER), 14, Qt.SolidLine, Qt.RoundCap))
+        # --- background arc (iOS separator grey) ---
+        p.setPen(QPen(QColor(C_BORDER), 20, Qt.SolidLine, Qt.RoundCap))
         p.drawArc(arc_rect, start_angle, span_bg)
 
-        # --- tick marks + numeric ring ---
-        for i in range(0, 11, 2):
+        # --- minimal tick marks at 0, 5, 10 only ---
+        for i in (0, 5, 10):
             frac = i / 10.0
             angle_deg = 225.0 - frac * 270.0
             ar = math.radians(angle_deg)
-            r_in = r - 22
-            r_out = r + 6
+            r_in = r - 28
+            r_out = r + 8
             x1 = cx + r_in * math.cos(ar)
             y1 = cy - r_in * math.sin(ar)
             x2 = cx + r_out * math.cos(ar)
             y2 = cy - r_out * math.sin(ar)
-            p.setPen(QPen(QColor(C_BORDER_2), 2))
+            p.setPen(QPen(QColor(C_BORDER_2), 3))
             p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
-
-            r_num = r - 42
-            xn = cx + r_num * math.cos(ar)
-            yn = cy - r_num * math.sin(ar)
-            p.setPen(QColor(C_TEXT_MUTED))
-            p.setFont(QFont("Arial", 9, QFont.Bold))
-            p.drawText(QRectF(xn - 14, yn - 10, 28, 20), Qt.AlignCenter, str(i))
 
         # --- value arc ---
         val = max(0.0, min(10.0, self._display))
         sweep_deg = -(val / 10.0) * 270.0
-        p.setPen(QPen(self._color, 14, Qt.SolidLine, Qt.RoundCap))
+        p.setPen(QPen(self._color, 20, Qt.SolidLine, Qt.RoundCap))
         p.drawArc(arc_rect, start_angle, int(sweep_deg * 16))
 
-        # --- center hero number ---
+        # --- tiny "RISK" caption above the number ---
+        p.setPen(QColor(C_TEXT_MUTED))
+        cap_font = _product_font(10, QFont.Black, letter_spacing=3)
+        p.setFont(cap_font)
+        cap_rect = QRectF(cx - r, cy - 92, 2 * r, 16)
+        p.drawText(cap_rect, Qt.AlignCenter, "OVERALL RISK")
+
+        # --- hero number (huge, Black weight) ---
         p.setPen(QColor(C_TEXT))
-        p.setFont(QFont("Arial", 72, QFont.Black))
-        num_rect = QRectF(cx - r, cy - 64, 2 * r, 90)
+        num_font = _product_font(56, QFont.Black, letter_spacing=-2)
+        p.setFont(num_font)
+        num_rect = QRectF(cx - r, cy - 76, 2 * r, 120)
         p.drawText(num_rect, Qt.AlignCenter, f"{self._display:.1f}")
 
-        # --- "OVERALL RISK · 0-10" subtitle ---
-        p.setPen(QColor(C_TEXT_MUTED))
-        p.setFont(QFont("Arial", 9, QFont.Bold))
-        sub_rect = QRectF(cx - r, cy + 16, 2 * r, 16)
-        p.drawText(sub_rect, Qt.AlignCenter, "OVERALL RISK  ·  0 — 10")
+        # --- "/ 10" subtle below the number ---
+        p.setPen(QColor(C_TEXT_FAINT))
+        slash_font = _product_font(14, QFont.Bold, letter_spacing=2)
+        p.setFont(slash_font)
+        slash_rect = QRectF(cx - r, cy + 40, 2 * r, 18)
+        p.drawText(slash_rect, Qt.AlignCenter, "OUT OF 10")
 
-        # --- risk label (colored) ---
+        # --- risk label (colored, large) ---
         p.setPen(self._color)
-        p.setFont(QFont("Arial", 15, QFont.Bold))
-        label_rect = QRectF(cx - r, cy + 36, 2 * r, 24)
+        label_font = _product_font(18, QFont.Black, letter_spacing=2)
+        p.setFont(label_font)
+        label_rect = QRectF(cx - r, cy + 60, 2 * r, 28)
         p.drawText(label_rect, Qt.AlignCenter, self._label)
 
-        # --- fusion weights tiny line ---
+        # --- fusion weight caption ---
         p.setPen(QColor(C_TEXT_MUTED))
-        p.setFont(QFont("Arial", 8, QFont.Bold))
-        weight_rect = QRectF(cx - r, cy + 60, 2 * r, 14)
+        wf_font = _product_font(10, QFont.Bold, letter_spacing=2.5)
+        p.setFont(wf_font)
+        weight_rect = QRectF(cx - r, cy + 90, 2 * r, 16)
         p.drawText(weight_rect, Qt.AlignCenter,
-                   f"FAST  {self._fast_w * 100:.0f}%     SLOW  {self._slow_w * 100:.0f}%")
+                   f"FAST  {self._fast_w * 100:.0f}%      SLOW  {self._slow_w * 100:.0f}%")
 
-        # --- recommended-action banner ---
-        banner_rect = QRectF(18, h - banner_h - 4, w - 36, banner_h - 6)
+        # --- recommended-action banner (iOS-style rounded rect) ---
+        banner_rect = QRectF(20, h - banner_h - 4, w - 40, banner_h - 6)
         path = QPainterPath()
-        path.addRoundedRect(banner_rect, 12, 12)
+        path.addRoundedRect(banner_rect, 18, 18)
 
-        grad = QLinearGradient(banner_rect.topLeft(), banner_rect.bottomRight())
-        grad.setColorAt(0.0, self._action_color.lighter(115))
-        grad.setColorAt(1.0, self._action_color.darker(118))
+        grad = QLinearGradient(banner_rect.topLeft(), banner_rect.bottomLeft())
+        grad.setColorAt(0.0, self._action_color.lighter(118))
+        grad.setColorAt(1.0, self._action_color.darker(110))
         p.fillPath(path, QBrush(grad))
 
-        p.setPen(QColor("#ffffff"))
-        p.setFont(QFont("Arial", 12, QFont.Bold))
-        label_line = QRectF(banner_rect.x(), banner_rect.y() + 6,
-                            banner_rect.width(), 18)
+        # caption
+        p.setPen(QColor(255, 255, 255, 220))
+        banner_cap = _product_font(10, QFont.Black, letter_spacing=3)
+        p.setFont(banner_cap)
+        label_line = QRectF(banner_rect.x(), banner_rect.y() + 10,
+                            banner_rect.width(), 16)
         p.drawText(label_line, Qt.AlignCenter, "⚠  RECOMMENDED ACTION")
 
-        p.setFont(QFont("Arial", 16, QFont.Black))
-        value_line = QRectF(banner_rect.x(), banner_rect.y() + 24,
-                            banner_rect.width(), 24)
+        # value
+        p.setPen(QColor("#ffffff"))
+        banner_val = _product_font(20, QFont.Black, letter_spacing=1)
+        p.setFont(banner_val)
+        value_line = QRectF(banner_rect.x(), banner_rect.y() + 30,
+                            banner_rect.width(), 32)
         p.drawText(value_line, Qt.AlignCenter, self._action)
 
 
 class StatusChip(QWidget):
-    """Pill-shaped status indicator with dot + text, optional blinking."""
+    """Apple-style rounded status pill — dot + bold caps text, optional blink."""
+
+    _CHIP_FONT = None  # lazy cache
 
     def __init__(self, text, color_hex, blinking=False, parent=None):
         super().__init__(parent)
@@ -312,7 +356,8 @@ class StatusChip(QWidget):
         self._color_hex = color_hex
         self._blink = blinking
         self._on = True
-        self.setFixedHeight(28)
+        self.setFixedHeight(34)
+        self._font = _product_font(11, QFont.Black, letter_spacing=2)
         self._reflow()
         if blinking:
             self._t = QTimer(self)
@@ -320,8 +365,8 @@ class StatusChip(QWidget):
             self._t.start(700)
 
     def _reflow(self):
-        fm = QFontMetrics(QFont("Arial", 9, QFont.Bold))
-        w = fm.horizontalAdvance(self._text) + 42
+        fm = QFontMetrics(self._font)
+        w = fm.horizontalAdvance(self._text) + 52
         self.setFixedWidth(w)
 
     def set_text(self, text):
@@ -340,28 +385,29 @@ class StatusChip(QWidget):
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.TextAntialiasing, True)
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         path = QPainterPath()
-        path.addRoundedRect(rect, 13, 13)
+        path.addRoundedRect(rect, 17, 17)
         p.fillPath(path, QColor(C_CARD_2))
 
         edge = QColor(self._color_hex)
-        edge.setAlpha(140)
-        p.setPen(QPen(edge, 1.2))
+        edge.setAlpha(180)
+        p.setPen(QPen(edge, 1.4))
         p.drawPath(path)
 
         # dot
-        ds = 8
+        ds = 10
         dc = QColor(self._color_hex)
         if self._blink and not self._on:
-            dc.setAlpha(50)
+            dc.setAlpha(60)
         p.setBrush(QBrush(dc))
         p.setPen(Qt.NoPen)
-        p.drawEllipse(QRectF(12, (self.height() - ds) / 2, ds, ds))
+        p.drawEllipse(QRectF(15, (self.height() - ds) / 2, ds, ds))
 
         p.setPen(QColor(C_TEXT))
-        p.setFont(QFont("Arial", 9, QFont.Bold))
-        tr = QRectF(26, 0, self.width() - 32, self.height())
+        p.setFont(self._font)
+        tr = QRectF(32, 0, self.width() - 38, self.height())
         p.drawText(tr, Qt.AlignLeft | Qt.AlignVCenter, self._text)
 
 
@@ -462,13 +508,17 @@ class Sparkline(QWidget):
 
 
 class SectionCard(QFrame):
-    """Rounded card container used as the base for all right-column panels."""
+    """
+    Rounded card container — Apple-style: soft fill, subtle 1 px border,
+    20 px radius. All right-column panels and the bottom VLM strip use
+    this as their base.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet(
             f"SectionCard {{ background: {C_CARD}; "
-            f"border: 1px solid {C_BORDER}; border-radius: 14px; }}"
+            f"border: 1px solid {C_BORDER}; border-radius: 20px; }}"
         )
 
 
@@ -523,7 +573,7 @@ class DrowsinessDetector(QMainWindow):
 
         # ================= SENTINEL DMS product UI =================
         self.setWindowTitle(f"{BRAND_NAME} DMS  ·  {BRAND_SUB}")
-        self.setGeometry(30, 30, 1780, 1040)
+        self.setGeometry(30, 30, 1860, 1080)
         self.setStyleSheet(
             f"QMainWindow {{ background-color: {C_BG}; }}"
             f"QWidget {{ background-color: {C_BG}; color: {C_TEXT}; }}"
@@ -540,18 +590,18 @@ class DrowsinessDetector(QMainWindow):
         #                        TOP BRAND BAR
         # ================================================================
         top_bar = QWidget()
-        top_bar.setFixedHeight(60)
+        top_bar.setFixedHeight(72)
         top_bar.setStyleSheet(f"background: transparent;")
         top_layout = QHBoxLayout(top_bar)
-        top_layout.setContentsMargins(6, 8, 6, 8)
-        top_layout.setSpacing(14)
+        top_layout.setContentsMargins(10, 12, 10, 12)
+        top_layout.setSpacing(16)
 
         self.brand_label = QLabel(
-            f"<span style='color:{C_ACCENT};font-size:26px;'>◈</span>"
-            f"<span style='color:{C_TEXT};font-size:22px;font-weight:900;"
-            f"letter-spacing:4px;'>  {BRAND_NAME}</span>"
-            f"<span style='color:{C_TEXT_MUTED};font-size:11px;"
-            f"font-weight:bold;letter-spacing:3px;'>"
+            f"<span style='color:{C_ACCENT};font-size:32px;font-weight:900;'>◈</span>"
+            f"<span style='color:{C_TEXT};font-size:28px;font-weight:900;"
+            f"letter-spacing:2px;'>  {BRAND_NAME}</span>"
+            f"<span style='color:{C_TEXT_MUTED};font-size:13px;"
+            f"font-weight:bold;letter-spacing:2.5px;'>"
             f"   ·   {BRAND_SUB}</span>"
         )
         self.brand_label.setStyleSheet("background: transparent;")
@@ -566,15 +616,14 @@ class DrowsinessDetector(QMainWindow):
         top_layout.addWidget(self.chip_fast)
         top_layout.addWidget(self.chip_slow)
 
-        top_layout.addSpacing(14)
+        top_layout.addSpacing(18)
 
         self.clock_label = QLabel()
         self.clock_label.setStyleSheet(
-            f"color: {C_TEXT}; font-size: 14px; font-weight: bold; "
-            f"letter-spacing: 2px; background: transparent;"
+            f"color: {C_TEXT}; background: transparent;"
         )
         self.clock_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.clock_label.setMinimumWidth(260)
+        self.clock_label.setMinimumWidth(300)
         top_layout.addWidget(self.clock_label)
 
         root_layout.addWidget(top_bar)
@@ -600,18 +649,20 @@ class DrowsinessDetector(QMainWindow):
         left_col.setStyleSheet("background: transparent;")
         left_v = QVBoxLayout(left_col)
         left_v.setContentsMargins(0, 0, 0, 0)
-        left_v.setSpacing(10)
+        left_v.setSpacing(12)
 
         self.video_label = HUDVideoLabel()
-        self.video_label.setFixedSize(880, 660)
+        self.video_label.setFixedSize(900, 676)
         left_v.addWidget(self.video_label, 0, Qt.AlignHCenter)
 
-        # Small caption bar under video
+        # Caption bar under video
         video_caption = QLabel(
-            f"<span style='color:{C_TEXT_MUTED};font-size:10px;"
-            f"font-weight:bold;letter-spacing:2.5px;'>"
-            f"LIVE CAMERA FEED  ·  /dev/video0  ·  MEDIAPIPE + YOLOv8"
-            f"</span>"
+            f"<span style='color:{C_TEXT_DIM};font-size:12px;"
+            f"font-weight:900;letter-spacing:2.2px;'>"
+            f"LIVE CAMERA FEED</span>"
+            f"<span style='color:{C_TEXT_MUTED};font-size:11px;"
+            f"font-weight:bold;letter-spacing:2px;'>"
+            f"     /dev/video0     MEDIAPIPE + YOLOv8</span>"
         )
         video_caption.setStyleSheet("background: transparent;")
         video_caption.setAlignment(Qt.AlignCenter)
@@ -624,40 +675,40 @@ class DrowsinessDetector(QMainWindow):
         right_col.setStyleSheet("background: transparent;")
         right_layout = QVBoxLayout(right_col)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(14)
+        right_layout.setSpacing(16)
+
+        def _make_section_header(text):
+            lbl = QLabel(
+                f"<span style='color:{C_TEXT_DIM};font-size:12px;"
+                f"font-weight:900;letter-spacing:2.5px;'>{text}</span>"
+            )
+            lbl.setStyleSheet("background: transparent;")
+            return lbl
 
         # --- Gauge card ---
         gauge_card = SectionCard()
         gauge_card_layout = QVBoxLayout(gauge_card)
-        gauge_card_layout.setContentsMargins(18, 14, 18, 14)
-        gauge_card_layout.setSpacing(6)
+        gauge_card_layout.setContentsMargins(24, 18, 24, 18)
+        gauge_card_layout.setSpacing(8)
 
-        gauge_header = QLabel(
-            f"<span style='color:{C_TEXT_MUTED};font-size:10px;"
-            f"font-weight:bold;letter-spacing:2.5px;'>"
-            f"◆  FUSION OUTPUT  ·  FAST + SLOW AGGREGATED</span>"
-        )
-        gauge_header.setStyleSheet("background: transparent;")
-        gauge_card_layout.addWidget(gauge_header)
+        gauge_card_layout.addWidget(_make_section_header(
+            "◆  FUSION OUTPUT     FAST + SLOW AGGREGATED"
+        ))
 
         self.risk_gauge = RiskGauge()
         gauge_card_layout.addWidget(self.risk_gauge, 1)
 
-        right_layout.addWidget(gauge_card, 5)
+        right_layout.addWidget(gauge_card, 6)
 
         # --- Fast metrics card ---
         fast_card = SectionCard()
         fast_card_layout = QVBoxLayout(fast_card)
-        fast_card_layout.setContentsMargins(20, 14, 20, 14)
-        fast_card_layout.setSpacing(8)
+        fast_card_layout.setContentsMargins(26, 18, 26, 18)
+        fast_card_layout.setSpacing(10)
 
-        fast_header = QLabel(
-            f"<span style='color:{C_TEXT_MUTED};font-size:10px;"
-            f"font-weight:bold;letter-spacing:2.5px;'>"
-            f"●  FAST SYSTEM  ·  REAL-TIME DETECTION</span>"
-        )
-        fast_header.setStyleSheet("background: transparent;")
-        fast_card_layout.addWidget(fast_header)
+        fast_card_layout.addWidget(_make_section_header(
+            "●  FAST SYSTEM     REAL-TIME DETECTION"
+        ))
 
         self.fast_label = QLabel()
         self.fast_label.setStyleSheet(
@@ -676,16 +727,12 @@ class DrowsinessDetector(QMainWindow):
         # --- Slow (VLM) multi-dimension card ---
         slow_card = SectionCard()
         slow_card_layout = QVBoxLayout(slow_card)
-        slow_card_layout.setContentsMargins(20, 14, 20, 14)
-        slow_card_layout.setSpacing(8)
+        slow_card_layout.setContentsMargins(26, 18, 26, 18)
+        slow_card_layout.setSpacing(10)
 
-        slow_header = QLabel(
-            f"<span style='color:{C_TEXT_MUTED};font-size:10px;"
-            f"font-weight:bold;letter-spacing:2.5px;'>"
-            f"◆  SLOW SYSTEM  ·  VLM MULTI-DIMENSIONAL ANALYSIS</span>"
-        )
-        slow_header.setStyleSheet("background: transparent;")
-        slow_card_layout.addWidget(slow_header)
+        slow_card_layout.addWidget(_make_section_header(
+            "◆  SLOW SYSTEM     VLM MULTI-DIMENSIONAL ANALYSIS"
+        ))
 
         self.slow_label = QLabel()
         self.slow_label.setStyleSheet(
@@ -705,13 +752,13 @@ class DrowsinessDetector(QMainWindow):
         # ================================================================
         bottom_card = SectionCard()
         bottom_layout = QVBoxLayout(bottom_card)
-        bottom_layout.setContentsMargins(24, 14, 24, 14)
-        bottom_layout.setSpacing(6)
+        bottom_layout.setContentsMargins(32, 20, 32, 20)
+        bottom_layout.setSpacing(10)
 
         bottom_header = QLabel(
-            f"<span style='color:{C_TEXT_MUTED};font-size:10px;"
-            f"font-weight:bold;letter-spacing:2.5px;'>"
-            f"📄  VLM ANALYSIS REPORT  ·  REAL-TIME NATURAL LANGUAGE</span>"
+            f"<span style='color:{C_TEXT_DIM};font-size:12px;"
+            f"font-weight:900;letter-spacing:2.5px;'>"
+            f"📄  VLM ANALYSIS REPORT     REAL-TIME NATURAL LANGUAGE</span>"
         )
         bottom_header.setStyleSheet("background: transparent;")
         bottom_layout.addWidget(bottom_header)
@@ -731,24 +778,23 @@ class DrowsinessDetector(QMainWindow):
         #                      FOOTER STATUS BAR
         # ================================================================
         footer = QWidget()
-        footer.setFixedHeight(28)
+        footer.setFixedHeight(36)
         footer.setStyleSheet("background: transparent;")
         footer_layout = QHBoxLayout(footer)
-        footer_layout.setContentsMargins(6, 2, 6, 2)
+        footer_layout.setContentsMargins(10, 4, 10, 4)
 
         self.footer_left = QLabel()
         self.footer_left.setStyleSheet(
-            f"color: {C_TEXT_MUTED}; font-size: 10px; letter-spacing: 2px; "
-            f"background: transparent; font-weight: bold;"
+            f"color: {C_TEXT_MUTED}; background: transparent;"
         )
         footer_layout.addWidget(self.footer_left)
         footer_layout.addStretch()
 
         self.footer_right = QLabel(
-            f"<span style='color:{C_ACCENT};font-size:10px;font-weight:bold;"
-            f"letter-spacing:2px;'>◈ {BRAND_NAME}</span>"
-            f"<span style='color:{C_TEXT_MUTED};font-size:10px;font-weight:bold;"
-            f"letter-spacing:2px;'>  DMS  {BRAND_VERSION}</span>"
+            f"<span style='color:{C_ACCENT};font-size:12px;font-weight:900;"
+            f"letter-spacing:2.5px;'>◈ {BRAND_NAME}</span>"
+            f"<span style='color:{C_TEXT_MUTED};font-size:12px;font-weight:900;"
+            f"letter-spacing:2.5px;'>   DMS  {BRAND_VERSION}</span>"
         )
         self.footer_right.setStyleSheet("background: transparent;")
         footer_layout.addWidget(self.footer_right)
@@ -887,23 +933,23 @@ class DrowsinessDetector(QMainWindow):
         def metric(label_en, value_html):
             return (
                 f"<td width='25%' valign='top'>"
-                f"<div style='color:{C_TEXT_MUTED};font-size:10px;"
-                f"font-weight:bold;letter-spacing:1.8px;'>{label_en}</div>"
-                f"<div style='margin-top:4px;'>{value_html}</div>"
+                f"<div style='color:{C_TEXT_MUTED};font-size:11px;"
+                f"font-weight:900;letter-spacing:2px;'>{label_en}</div>"
+                f"<div style='margin-top:6px;'>{value_html}</div>"
                 "</td>"
             )
 
         def big(value, color=C_TEXT, suffix="", suffix_color=C_TEXT_MUTED):
-            out = (f"<span style='color:{color};font-size:26px;"
-                   f"font-weight:900;letter-spacing:-1px;'>{value}</span>")
+            out = (f"<span style='color:{color};font-size:34px;"
+                   f"font-weight:900;letter-spacing:-1.5px;'>{value}</span>")
             if suffix:
-                out += (f"<span style='color:{suffix_color};font-size:13px;"
-                        f"font-weight:bold;'> {suffix}</span>")
+                out += (f"<span style='color:{suffix_color};font-size:15px;"
+                        f"font-weight:900;'>  {suffix}</span>")
             return out
 
         fast_html = (
             "<table width='100%' cellpadding='0' cellspacing='0' "
-            "style='margin-top:6px;'>"
+            "style='margin-top:8px;'>"
             "<tr>"
             + metric("BLINKS", big(self.blinks))
             + metric("MICROSLEEP",
@@ -913,7 +959,7 @@ class DrowsinessDetector(QMainWindow):
                      big(f"{fast['perclos'] * 100:.1f}",
                          color=perclos_color, suffix="%"))
             + "</tr>"
-            "<tr><td height='14'></td></tr>"
+            "<tr><td height='20'></td></tr>"
             "<tr>"
             + metric("EAR",
                      big(f"{fast['ear']:.3f}"))
@@ -937,11 +983,11 @@ class DrowsinessDetector(QMainWindow):
         # ===== SLOW (VLM multi-dim) card content =====
         if slow is None:
             slow_html = (
-                "<table width='100%' height='200' cellpadding='0' cellspacing='0'>"
+                "<table width='100%' height='220' cellpadding='0' cellspacing='0'>"
                 "<tr><td align='center' valign='middle'>"
-                f"<span style='color:{C_TEXT_MUTED};font-size:14px;"
-                f"letter-spacing:1.5px;'>"
-                f"⏳  AWAITING FIRST VLM SAMPLE  ·  10s INTERVAL"
+                f"<span style='color:{C_TEXT_MUTED};font-size:16px;"
+                f"font-weight:900;letter-spacing:2px;'>"
+                f"⏳     AWAITING FIRST VLM SAMPLE"
                 f"</span>"
                 "</td></tr></table>"
             )
@@ -984,17 +1030,19 @@ class DrowsinessDetector(QMainWindow):
             }.get(str(lighting).lower(), C_TEXT_MUTED)
             passengers = bool(_safe(slow, "context", "passengers_detected", default=False))
 
-            # Unicode block progress bar
-            def bar(fraction, color_hex, width=10):
+            # Unicode block progress bar, bigger and more opaque
+            def bar(fraction, color_hex, width=12):
                 fraction = max(0.0, min(1.0, fraction))
                 filled = int(round(fraction * width))
                 empty = width - filled
                 return (
-                    f"<span style='color:{color_hex};font-family:monospace;"
-                    f"font-size:13px;letter-spacing:-2px;'>"
+                    f"<span style='color:{color_hex};"
+                    f"font-family:{FONT_MONO_STACK};"
+                    f"font-size:17px;letter-spacing:-2px;'>"
                     f"{'█' * filled}</span>"
-                    f"<span style='color:{C_BORDER_2};font-family:monospace;"
-                    f"font-size:13px;letter-spacing:-2px;'>"
+                    f"<span style='color:{C_BORDER};"
+                    f"font-family:{FONT_MONO_STACK};"
+                    f"font-size:17px;letter-spacing:-2px;'>"
                     f"{'█' * empty}</span>"
                 )
 
@@ -1006,25 +1054,27 @@ class DrowsinessDetector(QMainWindow):
             def row(key, value, color_hex, bar_html=""):
                 return (
                     "<tr>"
-                    f"<td width='130' style='color:{C_TEXT_MUTED};"
-                    f"font-size:10px;font-weight:bold;letter-spacing:1.8px;'>"
+                    f"<td width='150' style='color:{C_TEXT_MUTED};"
+                    f"font-size:11px;font-weight:900;letter-spacing:2px;"
+                    f"padding-top:4px;'>"
                     f"{key}"
                     "</td>"
-                    f"<td style='color:{C_TEXT};font-size:17px;font-weight:bold;'>"
+                    f"<td style='color:{C_TEXT};font-size:20px;font-weight:900;"
+                    f"padding-top:4px;'>"
                     f"<span style='color:{color_hex};'>{value}</span>"
                     "</td>"
-                    f"<td align='right' width='160'>{bar_html}</td>"
+                    f"<td align='right' width='180' style='padding-top:6px;'>{bar_html}</td>"
                     "</tr>"
                 )
 
             d_label = (
                 f"{d_level}<span style='color:{C_TEXT_MUTED};"
-                f"font-size:13px;font-weight:bold;'> / 10</span>"
-                f"  <span style='color:{C_TEXT_MUTED};font-size:12px;"
+                f"font-size:15px;font-weight:900;'> / 10</span>"
+                f"  <span style='color:{C_TEXT_MUTED};font-size:13px;"
                 f"font-weight:bold;'>conf {d_conf}</span>"
             )
             ctx_label = (
-                f"{str(lighting).upper()} LIGHT  ·  "
+                f"{str(lighting).upper()} LIGHT    "
                 f"{'WITH PASSENGERS' if passengers else 'SOLO'}"
             )
 
@@ -1033,27 +1083,28 @@ class DrowsinessDetector(QMainWindow):
                     bar(float(d_level) / 10, d_color))
                 + row("DISTRACTION",
                       f"{di_text}"
-                      + (f"  <span style='color:{C_TEXT_MUTED};font-size:12px;'>"
-                         f"conf {di_conf:.2f}</span>" if di_det else ""),
+                      + (f"  <span style='color:{C_TEXT_MUTED};font-size:13px;"
+                         f"font-weight:bold;'>conf {di_conf:.2f}</span>"
+                         if di_det else ""),
                       di_color, di_bar)
                 + row("ANOMALY", an_text, an_color, an_bar)
                 + row("OCCLUSION",
                       f"{occ_text}"
-                      f"  <span style='color:{C_TEXT_MUTED};font-size:12px;'>"
-                      f"impact {occ_impact:.2f}</span>",
+                      f"  <span style='color:{C_TEXT_MUTED};font-size:13px;"
+                      f"font-weight:bold;'>impact {occ_impact:.2f}</span>",
                       occ_color, occ_bar)
                 + row("CONTEXT", ctx_label, light_color, "")
             )
 
             slow_html = (
-                "<table width='100%' cellpadding='8' cellspacing='0' "
-                "style='margin-top:6px;'>"
+                "<table width='100%' cellpadding='10' cellspacing='0' "
+                "style='margin-top:8px;'>"
                 f"{rows}"
                 "</table>"
-                f"<div style='color:{C_TEXT_MUTED};font-size:10px;"
-                f"letter-spacing:1.5px;margin-top:10px;font-weight:bold;'>"
-                f"MODEL  {slow.get('source','?')}   ·   "
-                f"AGE  {age:.1f}s   ·   "
+                f"<div style='color:{C_TEXT_MUTED};font-size:11px;"
+                f"letter-spacing:1.8px;margin-top:14px;font-weight:900;'>"
+                f"MODEL  {slow.get('source','?')}       "
+                f"AGE  {age:.1f}s       "
                 f"LATENCY  {slow.get('latency_s', 0)}s"
                 "</div>"
             )
@@ -1063,14 +1114,14 @@ class DrowsinessDetector(QMainWindow):
         full_explanation = _safe(slow, "explanation", default="") or ""
         if not full_explanation:
             final_html = (
-                f"<span style='color:{C_TEXT_MUTED};font-size:14px;'>"
+                f"<span style='color:{C_TEXT_MUTED};font-size:16px;'>"
                 f"Awaiting first VLM analysis cycle…"
                 "</span>"
             )
         else:
             final_html = (
-                f"<div style='color:{C_TEXT};font-size:16px;"
-                f"line-height:1.7;'>{full_explanation}</div>"
+                f"<div style='color:{C_TEXT};font-size:19px;"
+                f"line-height:1.7;font-weight:500;'>{full_explanation}</div>"
             )
         self.final_label.setText(final_html)
 
@@ -1103,11 +1154,11 @@ class DrowsinessDetector(QMainWindow):
         # Clock
         now = datetime.now()
         self.clock_label.setText(
-            f"<span style='color:{C_TEXT_MUTED};font-size:10px;"
-            f"font-weight:bold;letter-spacing:2px;'>SYSTEM TIME</span>"
-            f"&nbsp;&nbsp;&nbsp;"
-            f"<span style='color:{C_TEXT};font-size:15px;"
-            f"font-weight:900;letter-spacing:2px;'>"
+            f"<span style='color:{C_TEXT_MUTED};font-size:11px;"
+            f"font-weight:900;letter-spacing:2.5px;'>SYSTEM TIME</span>"
+            f"&nbsp;&nbsp;&nbsp;&nbsp;"
+            f"<span style='color:{C_TEXT};font-size:20px;"
+            f"font-weight:900;letter-spacing:1px;'>"
             f"{now.strftime('%H:%M:%S')}</span>"
         )
 
@@ -1115,12 +1166,15 @@ class DrowsinessDetector(QMainWindow):
         session_s = int(time.time() - self._session_start)
         hh, rem = divmod(session_s, 3600)
         mm, ss = divmod(rem, 60)
-        model_name = _safe(slow, "source", default="qwen3.5-omni-plus")
+        model_name = _safe(slow, "source", default="qwen3.5-omni-flash")
         self.footer_left.setText(
+            f"<span style='color:{C_TEXT_MUTED};font-size:12px;"
+            f"font-weight:900;letter-spacing:2px;'>"
             f"SESSION  {hh:02d}:{mm:02d}:{ss:02d}"
-            f"     ·     VLM  {model_name}"
-            f"     ·     FAST  {fps:.0f} FPS"
-            f"     ·     GPU  RTX 5070 TI"
+            f"       VLM  {model_name}"
+            f"       FAST  {fps:.0f} FPS"
+            f"       GPU  RTX 5070 TI"
+            f"</span>"
         )
 
 
@@ -1341,10 +1395,10 @@ class DrowsinessDetector(QMainWindow):
         qimg = QImage(
             rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888
         )
-        # The HUDVideoLabel is 880x660; leave 20 px for the HUD corner markers
-        # so the video content doesn't paint over them.
+        # HUDVideoLabel is 900x676; leave ~20 px margin so the cyan corner
+        # markers and center crosshair paint cleanly on top.
         p = qimg.scaled(
-            852, 632, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            872, 648, Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
         self.video_label.setPixmap(QPixmap.fromImage(p))
 
@@ -1381,6 +1435,31 @@ class DrowsinessDetector(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    # Global system font — Apple SF Pro fallback stack (Ubuntu Sans on
+    # Linux). This propagates to every widget / QLabel / QFrame and into
+    # their rich-text content. Qt auto-falls back per-glyph to Noto Sans
+    # CJK SC for Chinese characters.
+    app_font = QFont()
+    app_font.setFamilies([
+        "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter",
+        "Ubuntu Sans", "Ubuntu", "Noto Sans", "Noto Sans CJK SC",
+        "DejaVu Sans",
+    ])
+    app_font.setPointSize(11)
+    app_font.setHintingPreference(QFont.PreferFullHinting)
+    app_font.setStyleStrategy(QFont.PreferAntialias)
+    app.setFont(app_font)
+
+    # Global stylesheet: default bg + font-family inheritance for HTML
+    # content inside QLabels.
+    app.setStyleSheet(
+        f"* {{ font-family: {FONT_STACK}; }}"
+        f"QMainWindow, QWidget {{ background-color: {C_BG}; color: {C_TEXT}; }}"
+        f"QToolTip {{ background: {C_CARD_2}; color: {C_TEXT}; "
+        f"border: 1px solid {C_BORDER_2}; padding: 6px 10px; }}"
+    )
+
     window = DrowsinessDetector()
     window.show()
     sys.exit(app.exec_())
