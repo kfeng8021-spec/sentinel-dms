@@ -36,27 +36,27 @@ BRAND_NAME = "SENTINEL"
 BRAND_SUB = "DRIVER MONITORING SYSTEM"
 BRAND_VERSION = "v1.0"
 
-# ---- Apple iOS 13+ dark-mode / Tesla cockpit palette ----
-C_BG          = "#000000"   # true OLED black (Tesla + iOS)
-C_BG_ALT      = "#0a0a0c"   # subtle lift under the main bg
-C_CARD        = "#1c1c1e"   # iOS systemGray6 (dark) — secondary bg
-C_CARD_2      = "#2c2c2e"   # iOS systemGray5 (dark) — elevated card
-C_BORDER      = "#38383a"   # iOS separatorColor (dark)
-C_BORDER_2    = "#48484a"   # iOS systemGray4 — stronger separator
+# ---- Apple iOS 13+ LIGHT-mode palette — clean / bright cockpit ----
+C_BG          = "#f2f2f7"   # iOS systemGroupedBackground (light)
+C_BG_ALT      = "#ffffff"   # pure white — nav rail + subtle surface lifts
+C_CARD        = "#ffffff"   # pure white cards
+C_CARD_2      = "#f9f9fb"   # barely-perceptible elevation
+C_BORDER      = "#e5e5ea"   # iOS systemGray5 (light)
+C_BORDER_2    = "#d1d1d6"   # iOS systemGray4 (light) — stronger separator
 
-C_TEXT        = "#ffffff"   # pure white primary
-C_TEXT_DIM    = "#ebebf5"   # iOS secondary label (alpha via color)
-C_TEXT_MUTED  = "#8e8e93"   # iOS systemGray — tertiary label
-C_TEXT_FAINT  = "#636366"   # iOS systemGray2 — quaternary label
+C_TEXT        = "#1c1c1e"   # iOS label color — near-black but not pure
+C_TEXT_DIM    = "#48484a"   # iOS secondary label
+C_TEXT_MUTED  = "#8e8e93"   # iOS systemGray (works in both modes)
+C_TEXT_FAINT  = "#c7c7cc"   # iOS systemGray3 (light) — quaternary label
 
-C_ACCENT      = "#0a84ff"   # iOS system blue (dark mode)
-C_ACCENT_2    = "#5ac8fa"   # iOS system teal (dark mode)
+C_ACCENT      = "#007aff"   # iOS system blue (light mode)
+C_ACCENT_2    = "#5ac8fa"   # iOS system teal
 
-C_OK          = "#30d158"   # iOS system green (dark)
-C_WARN        = "#ffd60a"   # iOS system yellow (dark)
-C_ORANGE      = "#ff9f0a"   # iOS system orange (dark)
-C_DANGER      = "#ff453a"   # iOS system red (dark)
-C_CRITICAL    = "#ff3b30"   # iOS system red (standard)
+C_OK          = "#34c759"   # iOS system green (light)
+C_WARN        = "#ffcc00"   # iOS system yellow (light)
+C_ORANGE      = "#ff9500"   # iOS system orange (light)
+C_DANGER      = "#ff3b30"   # iOS system red (light)
+C_CRITICAL    = "#d70015"   # iOS deep red (for critical severity)
 
 # Preferred font families. SF Pro is Apple's system font — not available on
 # Linux, so Qt falls through to Ubuntu Sans (very clean modern sans, close
@@ -389,10 +389,15 @@ class StatusChip(QWidget):
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         path = QPainterPath()
         path.addRoundedRect(rect, 17, 17)
-        p.fillPath(path, QColor(C_CARD_2))
+
+        # Tinted fill — 10% of the accent color layered over white so the
+        # chip is clearly visible on light cards without being aggressive.
+        fill = QColor(self._color_hex)
+        fill.setAlpha(28)
+        p.fillPath(path, fill)
 
         edge = QColor(self._color_hex)
-        edge.setAlpha(180)
+        edge.setAlpha(170)
         p.setPen(QPen(edge, 1.4))
         p.drawPath(path)
 
@@ -405,7 +410,10 @@ class StatusChip(QWidget):
         p.setPen(Qt.NoPen)
         p.drawEllipse(QRectF(15, (self.height() - ds) / 2, ds, ds))
 
-        p.setPen(QColor(C_TEXT))
+        # Darker colored text (not pure C_TEXT) matches the dot — feels
+        # like a single coherent badge on a light surface.
+        txt_color = QColor(self._color_hex).darker(135)
+        p.setPen(txt_color)
         p.setFont(self._font)
         tr = QRectF(32, 0, self.width() - 38, self.height())
         p.drawText(tr, Qt.AlignLeft | Qt.AlignVCenter, self._text)
@@ -416,9 +424,12 @@ class HUDVideoLabel(QLabel):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Dark frame behind the video so the webcam feed (which is already
+        # dark) sits cleanly on the light product shell. The card chrome
+        # (border, radius) still matches the light theme.
         self.setStyleSheet(
-            f"QLabel {{ background: #000000; "
-            f"border: 1px solid {C_BORDER}; border-radius: 12px; }}"
+            f"QLabel {{ background: #111315; "
+            f"border: 1px solid {C_BORDER_2}; border-radius: 14px; }}"
         )
         self.setAlignment(Qt.AlignCenter)
 
@@ -538,7 +549,7 @@ class SentinelSplash(QWidget):
         self.setFixedSize(680, 440)
         self._message = "INITIALIZING"
         self._progress = 0.0
-        self.setStyleSheet(f"background: {C_BG};")
+        self.setStyleSheet(f"background: {C_BG_ALT};")
 
     def showMessage(self, msg, progress=None):
         self._message = msg.upper()
@@ -554,15 +565,15 @@ class SentinelSplash(QWidget):
 
         w, h = self.width(), self.height()
 
-        # --- rounded dark canvas with soft border ---
+        # --- rounded bright canvas with soft border ---
         outer = QRectF(0.5, 0.5, w - 1, h - 1)
         path = QPainterPath()
         path.addRoundedRect(outer, 24, 24)
         grad = QLinearGradient(0, 0, 0, h)
-        grad.setColorAt(0.0, QColor("#0a0a0c"))
-        grad.setColorAt(1.0, QColor("#000000"))
+        grad.setColorAt(0.0, QColor("#ffffff"))
+        grad.setColorAt(1.0, QColor("#f2f2f7"))
         p.fillPath(path, QBrush(grad))
-        p.setPen(QPen(QColor(C_BORDER), 1))
+        p.setPen(QPen(QColor(C_BORDER_2), 1))
         p.drawPath(path)
 
         # --- brand mark ---
@@ -628,25 +639,27 @@ class NavRailButton(QWidget):
         p.setRenderHint(QPainter.TextAntialiasing, True)
         w, h = self.width(), self.height()
 
-        # --- active highlight (left accent bar + bg) ---
+        # --- active highlight: 12% tinted-blue card + left accent bar ---
         if self._active:
             bg = QRectF(8, 6, w - 16, h - 12)
             path = QPainterPath()
             path.addRoundedRect(bg, 12, 12)
-            p.fillPath(path, QColor(C_CARD_2))
+            tint = QColor(C_ACCENT)
+            tint.setAlpha(30)
+            p.fillPath(path, tint)
             # Left accent bar
             p.setPen(Qt.NoPen)
             p.setBrush(QBrush(QColor(C_ACCENT)))
             p.drawRoundedRect(QRectF(0, 18, 3, h - 36), 1.5, 1.5)
 
         # --- icon ---
-        icon_color = C_TEXT if self._active else C_TEXT_MUTED
+        icon_color = C_ACCENT if self._active else C_TEXT_MUTED
         p.setPen(QColor(icon_color))
         p.setFont(_product_font(22, QFont.Black))
         p.drawText(QRectF(0, 14, w, 34), Qt.AlignCenter, self._icon)
 
         # --- label ---
-        label_color = C_TEXT if self._active else C_TEXT_FAINT
+        label_color = C_ACCENT if self._active else C_TEXT_FAINT
         p.setPen(QColor(label_color))
         p.setFont(_product_font(8, QFont.Black, letter_spacing=1.5))
         p.drawText(QRectF(0, 48, w, 14), Qt.AlignCenter, self._label)
