@@ -134,8 +134,8 @@ VLM calls and a polished desktop UI suitable for live demos.
 ## Quick Start
 
 ```bash
-git clone https://github.com/kfeng8021-spec/real-time-drowsy-driving-detection.git
-cd real-time-drowsy-driving-detection
+git clone https://github.com/kfeng8021-spec/sentinel-dms.git
+cd sentinel-dms
 
 conda create -n sentinel-dms python=3.10 -y
 conda activate sentinel-dms
