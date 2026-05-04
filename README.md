@@ -55,7 +55,7 @@ distress, poor lighting and ambiguous facial visibility.
 ## Live Cockpit UI
 
 <p align="center">
-  <img src="SentinelDMS_images/hud_normal_privacy.png" alt="SentinelDMS normal monitoring state with privacy mask" width="100%">
+  <img src="SentinelDMS_images/hud_mask.png" alt="SentinelDMS normal monitoring state with masked driver" width="100%">
 </p>
 
 The dashboard is not a generic demo window. It is built as an in-cabin operator
@@ -63,7 +63,7 @@ surface: a camera feed with HUD brackets, a fused risk gauge, fast vital signs,
 slow contextual awareness and a natural-language AI briefing in one view.
 
 <p align="center">
-  <img src="SentinelDMS_images/hud_occlusion_privacy.png" alt="SentinelDMS occlusion-aware monitoring state with privacy mask" width="100%">
+  <img src="SentinelDMS_images/hud_sunglasses.png" alt="SentinelDMS occlusion-aware monitoring state with sunglasses" width="100%">
 </p>
 
 The VLM path adds semantic self-awareness. When the face is masked, occluded or
